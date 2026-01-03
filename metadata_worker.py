@@ -83,7 +83,7 @@ def get_embedding(text):
 def ingest_from_api(conn):
     """Downloads catalog data from the external Vixsrc Addon API."""
     print("--- Starting API Ingestion ---")
-    base_url = "http://vixsrc-addon:3000/catalog/movie/vixsrc_movies"
+    base_url = os.environ.get("VIXSRC_URL", "http://godmode-vixsrc-addon:3000/catalog/movie/vixsrc_movies")
     skip = 0
     total_ingested = 0
     

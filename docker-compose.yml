@@ -2,18 +2,18 @@ services:
   # The AI Core (8 vCPU / 16GB RAM Optimized)
   ollama:
     image: ollama/ollama:latest
-    container_name: ollama
+    container_name: godmode-ollama
     networks:
       - ai_network
     volumes:
       - ./ollama:/root/.ollama
     environment:
-      - OLLAMA_KEEP_ALIVE=24h # Keep model loaded for instant response
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-24h}
     deploy:
       resources:
         limits:
-          cpus: '4.0' # Dedicate 4 full cores for inference
-          memory: 8192M # Allow up to 8GB for Llama 3.1 8B + Embedding models
+          cpus: '4.0'
+          memory: 8192M
     healthcheck:
       test: [ "CMD", "ollama", "list" ]
       interval: 30s
@@ -24,7 +24,7 @@ services:
   # Vector Database for Semantic Search
   chromadb:
     image: chromadb/chroma:latest
-    container_name: chromadb
+    container_name: godmode-chromadb
     networks:
       - ai_network
     volumes:
@@ -32,7 +32,7 @@ services:
     environment:
       - IS_PERSISTENT=TRUE
     ports:
-      - "127.0.0.1:8000:8000" # Explicitly bind to localhost for security
+      - "127.0.0.1:8000:8000"
     restart: unless-stopped
 
   # Semantic Search API (FastAPI)
@@ -40,11 +40,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.search
-    container_name: search-api
+    container_name: godmode-search-api
     networks:
       - ai_network
     ports:
-      - "127.0.0.1:8082:8080" # Localhost only, proxied by external Caddy
+      - "127.0.0.1:8082:8080"
+    environment:
+      - OLLAMA_URL=http://godmode-ollama:11434
+      - CHROMA_HOST=godmode-chromadb
+      - CHROMA_PORT=8000
     depends_on:
       - ollama
       - chromadb
@@ -55,16 +59,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.addon
-    container_name: stremio-addon
+    container_name: godmode-stremio-addon
     networks:
       - ai_network
     ports:
-      - "${HOST_BIND_IP:-127.0.0.1}:8083:8080" # Stremio requires public access via proxy
+      - "${HOST_BIND_IP:-127.0.0.1}:8083:8080"
     volumes:
-      - ./data:/data # Mounts the shared library folder
+      - ./data:/data
     environment:
-      - SEARCH_API_URL=http://search-api:8080
-      - MEDIAFLOW_URL=http://mediaflow-proxy:8000
+      - SEARCH_API_URL=http://godmode-search-api:8080
+      - MEDIAFLOW_URL=http://godmode-mediaflow-proxy:8000
       - FILE_SERVER_URL=${FILE_SERVER_URL:-http://localhost:8090}
       - PUBLIC_DOMAIN=${PUBLIC_DOMAIN:-http://localhost:8083}
     depends_on:
@@ -74,17 +78,17 @@ services:
   # Mediaflow Proxy (Guaranteed resources for zero buffering)
   mediaflow-proxy:
     image: mhdzumair/mediaflow-proxy:latest
-    container_name: mediaflow-proxy
+    container_name: godmode-mediaflow-proxy
     ports:
-      - "127.0.0.1:8001:8000" # Mapped to 8001 on host to avoid conflict with ChromaDB (both use 8000)
+      - "127.0.0.1:8001:8000"
     networks:
       - ai_network
     environment:
-      - LLM_API_URL=http://ollama:11434/api/generate
+      - LLM_API_URL=http://godmode-ollama:11434/api/generate
     deploy:
       resources:
         reservations:
-          cpus: '2.0' # Reserve 2 cores exclusively for media traffic
+          cpus: '2.0'
     depends_on:
       ollama:
         condition: service_healthy
@@ -93,15 +97,15 @@ services:
   # UI for managing and testing prompts (Internal access only)
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
-    container_name: open-webui
+    container_name: godmode-open-webui
     ports:
-      - "127.0.0.1:8080:8080" # SECURITY: Localhost only
+      - "127.0.0.1:8080:8080"
     networks:
       - ai_network
     volumes:
       - ./open-webui:/app/backend/data
     environment:
-      - 'OLLAMA_BASE_URL=http://ollama:11434'
+      - 'OLLAMA_BASE_URL=http://godmode-ollama:11434'
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -111,11 +115,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
-    container_name: metadata-worker
+    container_name: godmode-metadata-worker
     networks:
       - ai_network
     volumes:
       - ./data:/data
+    environment:
+      - OLLAMA_URL=http://godmode-ollama:11434
+      - CHROMA_HOST=godmode-chromadb
+      - VIXSRC_URL=http://godmode-vixsrc-addon:3000/catalog/movie/vixsrc_movies
     depends_on:
       - ollama
       - chromadb
@@ -124,11 +132,11 @@ services:
   # File Server for Local Media
   file-server:
     image: nginx:alpine
-    container_name: file-server
+    container_name: godmode-file-server
     volumes:
-      - ./data:/usr/share/nginx/html/data # Mounts /data so accessible at /data/...
+      - ./data:/usr/share/nginx/html/data
     ports:
-      - "127.0.0.1:8090:80" # Exposed locally, proxied via Caddy
+      - "127.0.0.1:8090:80"
     networks:
       - ai_network
     restart: unless-stopped
@@ -138,7 +146,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.mock
-    container_name: vixsrc-addon
+    container_name: godmode-vixsrc-addon
     networks:
       - ai_network
     restart: unless-stopped
