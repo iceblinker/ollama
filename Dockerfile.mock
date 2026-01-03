@@ -1,0 +1,9 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+RUN pip install fastapi uvicorn
+
+COPY mock_vixsrc.py .
+
+CMD ["python", "mock_vixsrc.py"]

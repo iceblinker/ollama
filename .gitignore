@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Docker
+docker-compose.override.yml
+
+# Data & Models (Too large for GitHub)
+ollama/
+chroma_data/
+open-webui/
+data/
+*.db
+
+# Logs
+*.log

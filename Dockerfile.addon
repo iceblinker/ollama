@@ -1,0 +1,5 @@
+FROM python:3.11-slim
+RUN pip install fastapi uvicorn requests
+WORKDIR /app
+COPY stremio_addon.py .
+CMD ["python", "stremio_addon.py"]

@@ -1,0 +1,22 @@
+your-domain.com {
+    # Reverse proxy for your media addon
+    # Note: Port changed to 8001 due to ChromaDB conflict
+    handle_path /media/* {
+        reverse_proxy localhost:8001
+    }
+
+    # Optional: Secure access to your LLM WebUI
+    handle_path /ai-admin/* {
+        reverse_proxy localhost:8080
+    }
+
+    # Semantic Search API
+    handle_path /search/* {
+        reverse_proxy localhost:8082
+    }
+
+    # Stremio Addon
+    handle_path /stremio/* {
+        reverse_proxy localhost:8083
+    }
+}

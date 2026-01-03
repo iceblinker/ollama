@@ -1,0 +1,147 @@
+services:
+  # The AI Core (8 vCPU / 16GB RAM Optimized)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    networks:
+      - ai_network
+    volumes:
+      - ./ollama:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h # Keep model loaded for instant response
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0' # Dedicate 4 full cores for inference
+          memory: 8192M # Allow up to 8GB for Llama 3.1 8B + Embedding models
+    healthcheck:
+      test: [ "CMD", "ollama", "list" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Vector Database for Semantic Search
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+    networks:
+      - ai_network
+    volumes:
+      - ./chroma_data:/chroma/data
+    environment:
+      - IS_PERSISTENT=TRUE
+    ports:
+      - "127.0.0.1:8000:8000" # Explicitly bind to localhost for security
+    restart: unless-stopped
+
+  # Semantic Search API (FastAPI)
+  search-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.search
+    container_name: search-api
+    networks:
+      - ai_network
+    ports:
+      - "127.0.0.1:8082:8080" # Localhost only, proxied by external Caddy
+    depends_on:
+      - ollama
+      - chromadb
+    restart: unless-stopped
+
+  # Stremio Addon (Bridge)
+  stremio-addon:
+    build:
+      context: .
+      dockerfile: Dockerfile.addon
+    container_name: stremio-addon
+    networks:
+      - ai_network
+    ports:
+      - "127.0.0.1:8083:8080" # Stremio requires public access via proxy
+    volumes:
+      - ./data:/data # Mounts the shared library folder
+    environment:
+      - SEARCH_API_URL=http://search-api:8080
+      - MEDIAFLOW_URL=http://mediaflow-proxy:8000
+    depends_on:
+      - search-api
+    restart: unless-stopped
+
+  # Mediaflow Proxy (Guaranteed resources for zero buffering)
+  mediaflow-proxy:
+    image: mhdzumair/mediaflow-proxy:latest
+    container_name: mediaflow-proxy
+    ports:
+      - "127.0.0.1:8001:8000" # Mapped to 8001 on host to avoid conflict with ChromaDB (both use 8000)
+    networks:
+      - ai_network
+    environment:
+      - LLM_API_URL=http://ollama:11434/api/generate
+    deploy:
+      resources:
+        reservations:
+          cpus: '2.0' # Reserve 2 cores exclusively for media traffic
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # UI for managing and testing prompts (Internal access only)
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "127.0.0.1:8080:8080" # SECURITY: Localhost only
+    networks:
+      - ai_network
+    volumes:
+      - ./open-webui:/app/backend/data
+    environment:
+      - 'OLLAMA_BASE_URL=http://ollama:11434'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # The AI Worker (Background metadata tasks)
+  metadata-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: metadata-worker
+    networks:
+      - ai_network
+    volumes:
+      - ./data:/data
+    depends_on:
+      - ollama
+      - chromadb
+    restart: unless-stopped
+
+  # File Server for Local Media
+  file-server:
+    image: nginx:alpine
+    container_name: file-server
+    volumes:
+      - ./data:/usr/share/nginx/html/data # Mounts /data so accessible at /data/...
+    ports:
+      - "127.0.0.1:8090:80" # Exposed locally, proxied via Caddy
+    networks:
+      - ai_network
+    restart: unless-stopped
+
+  # Mock Vixsrc Addon (Source for Metadata Worker)
+  vixsrc-addon:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+    container_name: vixsrc-addon
+    networks:
+      - ai_network
+    restart: unless-stopped
+
+networks:
+  ai_network:
+    name: ai_network
+    driver: bridge

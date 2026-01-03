@@ -1,0 +1,5 @@
+FROM python:3.11-slim
+RUN pip install fastapi uvicorn requests chromadb
+WORKDIR /app
+COPY search_service.py .
+CMD ["python", "search_service.py"]
