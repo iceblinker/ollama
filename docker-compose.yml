@@ -59,7 +59,7 @@ services:
     networks:
       - ai_network
     ports:
-      - "127.0.0.1:8083:8080" # Stremio requires public access via proxy
+      - "${HOST_BIND_IP:-127.0.0.1}:8083:8080" # Stremio requires public access via proxy
     volumes:
       - ./data:/data # Mounts the shared library folder
     environment:
