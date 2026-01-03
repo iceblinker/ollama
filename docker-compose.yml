@@ -146,4 +146,4 @@ services:
 networks:
   ai_network:
     name: ai_network
-    driver: bridge
+    external: true
