@@ -65,6 +65,8 @@ services:
     environment:
       - SEARCH_API_URL=http://search-api:8080
       - MEDIAFLOW_URL=http://mediaflow-proxy:8000
+      - FILE_SERVER_URL=${FILE_SERVER_URL:-http://localhost:8090}
+      - PUBLIC_DOMAIN=${PUBLIC_DOMAIN:-http://localhost:8083}
     depends_on:
       - search-api
     restart: unless-stopped
